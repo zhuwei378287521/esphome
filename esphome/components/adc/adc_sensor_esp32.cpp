@@ -5,12 +5,17 @@
 #include <cinttypes>
 
 namespace esphome {
+//命名空间：使用 esphome::adc 命名空间
 namespace adc {
 
-static const char *const TAG = "adc.esp32";
+static const char *const TAG = "adc.esp32";  //日志标签：TAG = "adc.esp32"
 
+//共享 ADC 句柄
+//共享资源：ADC1 和 ADC2 的句柄在所有 ADC 传感器实例间共享
+//资源管理：避免重复初始化同一 ADC 单元
 adc_oneshot_unit_handle_t ADCSensor::shared_adc_handles[2] = {nullptr, nullptr};
 
+// 3. 辅助函数:字符串转换：将枚举值转换为可读的日志字符串
 const LogString *attenuation_to_str(adc_atten_t attenuation) {
   switch (attenuation) {
     case ADC_ATTEN_DB_0:
@@ -38,8 +43,9 @@ const LogString *adc_unit_to_str(adc_unit_t unit) {
 }
 
 void ADCSensor::setup() {
-  // Check if another sensor already initialized this ADC unit
+  // Check if another sensor already initialized this ADC unit// 1. 初始化 ADC 单元（如果尚未初始化）
   if (ADCSensor::shared_adc_handles[this->adc_unit_] == nullptr) {
+    // 配置并创建 ADC 句柄
     adc_oneshot_unit_init_cfg_t init_config = {};  // Zero initialize
     init_config.unit_id = this->adc_unit_;
     init_config.ulp_mode = ADC_ULP_MODE_DISABLE;
@@ -59,6 +65,7 @@ void ADCSensor::setup() {
 
   this->setup_flags_.handle_init_complete = true;
 
+  // 2. 配置 ADC 通道
   adc_oneshot_chan_cfg_t config = {
       .atten = this->attenuation_,
       .bitwidth = ADC_BITWIDTH_DEFAULT,
@@ -72,6 +79,10 @@ void ADCSensor::setup() {
   this->setup_flags_.config_complete = true;
 
   // Initialize ADC calibration
+  // 3. 初始化 ADC 校准
+  // 根据 ESP32 变体选择不同的校准方案：
+  // - ESP32C3/S3 等使用曲线拟合校准
+  // - ESP32/ESP32S2 使用线性拟合校准
   if (this->calibration_handle_ == nullptr) {
     adc_cali_handle_t handle = nullptr;
 
@@ -120,6 +131,8 @@ void ADCSensor::setup() {
 }
 
 void ADCSensor::dump_config() {
+  // 输出配置信息：引脚、通道、单元、衰减、采样设置等
+  // 以及初始化状态
   LOG_SENSOR("", "ADC Sensor", this);
   LOG_PIN("  Pin: ", this->pin_);
   ESP_LOGCONFIG(
@@ -144,6 +157,9 @@ void ADCSensor::dump_config() {
 }
 
 float ADCSensor::sample() {
+  //采样模式选择：
+  //自动范围模式：sample_autorange_()
+  //固定衰减模式：sample_fixed_attenuation_()
   if (this->autorange_) {
     return this->sample_autorange_();
   } else {
@@ -151,9 +167,15 @@ float ADCSensor::sample() {
   }
 }
 
+/**
+ * @brief 7. 固定衰减采样
+ *
+ * @return float
+ */
 float ADCSensor::sample_fixed_attenuation_() {
   auto aggr = Aggregator<uint32_t>(this->sampling_mode_);
 
+  // 多次采样并聚合
   for (uint8_t sample = 0; sample < this->sample_count_; sample++) {
     int raw;
     esp_err_t err = adc_oneshot_read(this->adc_handle_, this->channel_, &raw);
@@ -173,16 +195,19 @@ float ADCSensor::sample_fixed_attenuation_() {
 
   uint32_t final_value = aggr.aggregate();
 
+  // 转换为电压
   if (this->output_raw_) {
-    return final_value;
+    return final_value;  // 返回原始 ADC 值
   }
 
+  // 使用校准转换或默认公式
   if (this->calibration_handle_ != nullptr) {
     int voltage_mv;
     esp_err_t err = adc_cali_raw_to_voltage(this->calibration_handle_, final_value, &voltage_mv);
     if (err == ESP_OK) {
       return voltage_mv / 1000.0f;
     } else {
+      // 默认公式：raw * 3.3V / 4095
       ESP_LOGW(TAG, "ADC calibration conversion failed with error %d, disabling calibration", err);
       if (this->calibration_handle_ != nullptr) {
 #if USE_ESP32_VARIANT_ESP32C3 || USE_ESP32_VARIANT_ESP32C5 || USE_ESP32_VARIANT_ESP32C6 || \
@@ -200,9 +225,10 @@ float ADCSensor::sample_fixed_attenuation_() {
 }
 
 float ADCSensor::sample_autorange_() {
-  // Auto-range mode
+  // Auto-range mode   8. 自动范围采样
   auto read_atten = [this](adc_atten_t atten) -> std::pair<int, float> {
     // First reconfigure the attenuation for this reading
+    // 读取不同衰减下的值
     adc_oneshot_chan_cfg_t config = {
         .atten = atten,
         .bitwidth = ADC_BITWIDTH_DEFAULT,
@@ -332,6 +358,7 @@ float ADCSensor::sample_autorange_() {
     return NAN;
   }
 
+  // 计算权重系数
   const int adc_half = 2048;
   const uint32_t c12 = std::min(raw12, adc_half);
 
@@ -355,6 +382,7 @@ float ADCSensor::sample_autorange_() {
     return NAN;
   }
 
+  // 加权平均
   const float final_result = (mv12 * c12 + mv6 * c6 + mv2 * c2 + mv0 * c0) / csum;
   ESP_LOGV(TAG,
            "Autorange final: (%.6f*%" PRIu32 " + %.6f*%" PRIu32 " + %.6f*%" PRIu32 " + %.6f*%" PRIu32 ")/%" PRIu32
