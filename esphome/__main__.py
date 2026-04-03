@@ -587,17 +587,33 @@ def wrap_to_code(name, comp):
 
 
 def write_cpp(config: ConfigType, native_idf: bool = False) -> int:
+    """
+    根据yaml文件，生成cpp文件
+    @param config: 解析后的配置文件字典。
+    @param native_idf: 是否使用原生 ESP-IDF 框架（仅 ESP32）。
+    """
+
+    # 检查环境变量 ENV_NOGITIGNORE。
+    # 如果未设置或为 False，向项目根目录写入 .gitignore 文件（防止生成文件被误提交到 Git）。
     if not get_bool_env(ENV_NOGITIGNORE):
         writer.write_gitignore()
 
     # Store native_idf flag so esp32 component can check it
+    # 存储 native_idf 标志
+    # 目的：让 ESP32 组件在代码生成阶段可以查询此标志，判断是否使用原生 ESP-IDF 框架。
     CORE.data[KEY_NATIVE_IDF] = native_idf
 
+    # 该函数遍历所有组件配置，调用每个组件的 to_code() 方法生成 C++ 代码。
     generate_cpp_contents(config)
+
+    # 写入 C++ 文件：
     return write_cpp_file(native_idf=native_idf)
 
 
 def generate_cpp_contents(config: ConfigType) -> None:
+    """
+    生成C++的内容，但不写入文件。这个函数会遍历配置中的所有组件，并调用它们的 to_code() 方法来生成 C++ 代码片段，这些片段会被添加到 CORE.cpp_main_section 中，最后由 write_cpp_file() 写入到实际的 C++ 文件中。
+    """
     _LOGGER.info("Generating C++ source...")
 
     for name, component, conf in iter_component_configs(CORE.config):
@@ -609,6 +625,10 @@ def generate_cpp_contents(config: ConfigType) -> None:
 
 
 def write_cpp_file(native_idf: bool = False) -> int:
+    """
+    写入 C++ 文件。
+    @param native_idf: 是否使用原生 ESP-IDF 框架（仅 ESP32）。
+    """
     code_s = indent(CORE.cpp_main_section)
     writer.write_cpp(code_s)
 

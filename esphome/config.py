@@ -50,17 +50,40 @@ def iter_components(config):
 
 
 def iter_component_configs(config):
-    for domain, conf in config.items():
-        component = get_component(domain)
-        if component.multi_conf:
+    """
+    这个函数是 ESPHome 配置处理的核心迭代器，用于遍历配置文件中的所有组件配置，包括普通组件和平台组件。以下是详细分析：
+    参数：config - 解析后的配置文件字典（键为组件域，值为配置内容）。
+    返回值：生成器，yield 元组 (domain, component, conf)，其中：
+    domain: 组件域名称（如 "sensor"、"switch" 或 "sensor.ultrasonic"）
+    component: 组件清单对象（ComponentManifest）
+    conf: 组件配置字典
+    """
+    for (
+        domain,
+        conf,
+    ) in config.items():  # 遍历顶级配置项：迭代配置文件中的每个顶级键值对（如 sensor:, switch:, wifi: 等）。
+        component = get_component(domain)  # 获取组件清单：
+        if component.multi_conf:  # 处理多配置组件：
+            # 示例：sensor 组件可以有多个传感器配置。
+            # 为每个配置项 yield (domain, component, conf_)。
             for conf_ in conf:
                 yield domain, component, conf_
         else:
-            yield domain, component, conf
+            yield (
+                domain,
+                component,
+                conf,
+            )  # 单配置组件：配置是单个字典，直接 yield (domain, component, conf)。
+            # 示例：wifi 组件通常只有一个配置块。
+
+        # 处理平台组件：
+        # 示例：sensor 是平台组件，支持 ultrasonic、dht、adc 等平台。
         if component.is_platform_component:
             for p_config in conf:
-                p_name = f"{domain}.{p_config[CONF_PLATFORM]}"
-                platform = get_platform(domain, p_config[CONF_PLATFORM])
+                p_name = f"{domain}.{p_config[CONF_PLATFORM]}"  # 构造平台全名：
+                platform = get_platform(
+                    domain, p_config[CONF_PLATFORM]
+                )  # 返回平台特定的组件清单。
                 yield p_name, platform, p_config
 
 
