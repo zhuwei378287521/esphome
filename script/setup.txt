@@ -1,0 +1,133 @@
+这段 setup 脚本其实就是：
+👉 一键帮你把 ESPHome 的开发环境搭好（Python虚拟环境 + 依赖 + Git钩子）
+
+我给你按“工程师能用”的方式拆清楚👇
+
+一、整体流程（先有全局认知）
+
+这个脚本做了 5 件事：
+
+切到项目根目录
+创建 Python 虚拟环境（venv）
+安装一个更快的包管理工具 uv
+安装 ESPHome 的开发依赖
+安装 Git pre-commit 钩子
+二、逐行解析（核心）
+① 脚本开头
+#!/usr/bin/env bash
+set -e
+
+👉 含义：
+
+用 bash 执行
+set -e：任何一步失败就直接退出（防止环境装一半）
+② 切换目录
+cd "$(dirname "$0")/.."
+
+👉 很关键：
+
+$0 = 当前脚本路径
+dirname "$0" = 脚本所在目录
+/.. = 上一级目录（项目根目录）
+
+👉 目的：无论你在哪执行，都回到 esphome 根目录
+
+③ 创建虚拟环境
+if [ ! -n "$VIRTUAL_ENV" ]; then
+
+👉 判断：
+
+如果你还没进入虚拟环境 → 才创建
+两种创建方式：
+if [ -x "$(command -v uv)" ]; then
+  uv venv --seed venv
+else
+  python3 -m venv venv
+fi
+
+👉 逻辑：
+
+有 uv → 用 uv（更快）
+没有 → 用 Python 自带 venv
+激活环境：
+source venv/bin/activate
+
+👉 从这里开始：
+
+👉 你的 Python、pip 都是“隔离环境”
+
+④ 安装 uv（如果没有）
+if ! [ -x "$(command -v uv)" ]; then
+  python3 -m pip install uv
+fi
+
+👉 uv 是什么？
+
+👉 一个比 pip 更快的工具（Rust写的）
+
+⑤ 安装基础构建工具
+uv pip install setuptools wheel
+
+👉 必备：
+
+setuptools：Python打包工具
+wheel：编译包格式
+⑥ 安装 ESPHome 开发依赖（重点）
+uv pip install -e ".[dev,test]" --config-settings editable_mode=compat
+
+👉 这句是核心中的核心
+
+拆开讲：
+
+-e（editable 模式）
+
+👉 意思是：
+
+👉 源码改了，不用重新安装，直接生效
+
+适合开发
+
+".[dev,test]"
+
+👉 安装：
+
+主程序依赖
+dev（开发工具）
+test（测试工具）
+实际会装什么？
+
+大概包括：
+
+pytest（测试）
+black（格式化）
+flake8（代码检查）
+⑦ 安装 Git 钩子
+pre-commit install
+
+👉 作用：
+
+👉 你每次 git commit 时自动做这些事：
+
+格式化代码
+检查语法
+防止低级错误
+⑧ 创建临时目录
+mkdir -p .temp
+
+👉 存放：
+
+临时文件
+编译中间产物
+⑨ 提示信息
+echo "Virtual environment created..."
+
+👉 告诉你：
+
+source venv/bin/activate
+三、你执行完之后会得到什么？
+
+👉 一个完整开发环境：
+
+venv/           ← Python虚拟环境
+.temp/          ← 临时目录
+.git/hooks/     ← pre-commit钩子

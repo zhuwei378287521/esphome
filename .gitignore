@@ -148,3 +148,5 @@ sdkconfig.*
 /managed_components
 
 api-docs/
+
+esphome.code-workspace

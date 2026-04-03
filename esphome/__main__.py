@@ -21,6 +21,9 @@ import argcomplete
 # Note: Do not import modules from esphome.components here, as this would
 # cause them to be loaded before external components are processed, resulting
 # in the built-in version being used instead of the external component one.
+# 注意：不要在这里导入 esphome.components 中的模块，
+# 因为这会导致这些模块在外部组件处理之前被加载，
+# 从而使用内置版本，而不是外部组件版本。
 from esphome import const, writer, yaml_util
 import esphome.codegen as cg
 from esphome.config import iter_component_configs, read_config, strip_default_ids
@@ -1156,14 +1159,29 @@ def command_logs(args: ArgsProtocol, config: ConfigType) -> int | None:
 
 
 def command_run(args: ArgsProtocol, config: ConfigType) -> int | None:
+    """
+    run命令的执行函数，负责将配置文件编译成C++代码，编译程序，并上传到设备上。上传完成后，如果没有指定no_logs参数，则会继续显示设备日志。
+
+    args: 命令行参数对象（包含设备、日志选项等）。
+    config: 解析后的配置文件字典。
+
+    """
+
+    # 获取 native_idf 参数：就是看采用esp-idf还是arduino 框架
     native_idf = getattr(args, "native_idf", False)
+
+    # 生成 C++ 代码：
     exit_code = write_cpp(config, native_idf=native_idf)
     if exit_code != 0:
-        return exit_code
+        return exit_code  # 如果失败（退出码非 0），立即返回错误码。
+
+    # 编译程序：
     exit_code = compile_program(args, config)
-    if exit_code != 0:
+    if exit_code != 0:  # 如果失败，返回错误码；成功则记录日志。
         return exit_code
     _LOGGER.info("Successfully compiled program.")
+
+    # 如果是主机模式（CORE.is_host 为真），直接运行编译后的程序（ELF 文件），不进行上传。
     if CORE.is_host:
         from esphome.platformio_api import get_idedata
 
@@ -1171,7 +1189,7 @@ def command_run(args: ArgsProtocol, config: ConfigType) -> int | None:
         _LOGGER.info("Running program from path '%s'", program_path)
         return run_external_process(program_path)
 
-    # Get devices, resolving special identifiers like OTA
+    # Get devices, resolving special identifiers like OTA 获取上传设备：
     devices = choose_upload_log_host(
         default=args.device,
         check_default=None,
@@ -1179,8 +1197,13 @@ def command_run(args: ArgsProtocol, config: ConfigType) -> int | None:
     )
 
     # Snapshot current serial ports before upload so we can detect new ones
+    # 记录上传前的串口端口列表，用于检测新设备（如 RP2040 的 BOOTSEL 模式）。
     pre_upload_ports = {p.path for p in get_serial_ports()}
 
+    # 上传程序：
+    # 调用 upload_program 上传固件。
+    # 成功时记录日志；失败时警告并返回错误码。
+    # successful_device 返回成功上传的设备路径（或 None）。
     exit_code, successful_device = upload_program(config, args, devices)
     if exit_code == 0:
         _LOGGER.info("Successfully uploaded program.")
@@ -1188,11 +1211,12 @@ def command_run(args: ArgsProtocol, config: ConfigType) -> int | None:
         _LOGGER.warning("Failed to upload to %s", devices)
         return exit_code
 
-    if args.no_logs:
+    if args.no_logs:  # 如果指定 --no-logs，跳过日志显示，直接返回成功。
         return 0
 
     # After BOOTSEL upload, wait for a new serial port to appear
-    # so it shows up in the log chooser
+    # so it shows up in the log chooser ,,,,,
+    # RP2040 特殊处理：
     if (
         successful_device is None
         and CORE.data.get(KEY_CORE, {}).get(KEY_TARGET_PLATFORM) == PLATFORM_RP2040
@@ -1201,16 +1225,21 @@ def command_run(args: ArgsProtocol, config: ConfigType) -> int | None:
         # If exactly one new serial port appeared, use it directly
         serial_ports = get_serial_ports()
         new_ports = [p for p in serial_ports if p.path not in pre_upload_ports]
+        # 对于 RP2040 平台，如果上传成功但未指定设备，等待新串口出现（BOOTSEL 模式后设备重枚举）。
+
+        # 如果只有一个新端口，自动选择它作为日志设备。
         if len(new_ports) == 1:
             successful_device = new_ports[0].path
 
-    # For logs, prefer the device we successfully uploaded to
+    # For logs, prefer the device we successfully uploaded to 显示日志：
     devices = choose_upload_log_host(
         default=successful_device,
-        check_default=successful_device,
+        check_default=successful_device,  # 优先使用成功上传的设备作为日志源。
         purpose=Purpose.LOGGING,
     )
-    return show_logs(config, args, devices)
+    return show_logs(
+        config, args, devices
+    )  # 调用 show_logs 显示设备日志（串口、API 或 MQTT）。
 
 
 def command_clean_mqtt(args: ArgsProtocol, config: ConfigType) -> int | None:
@@ -1227,6 +1256,7 @@ def command_clean_all(args: ArgsProtocol) -> int | None:
     return 0
 
 
+# esphome version命令的执行函数，输出当前esphome的版本信息。
 def command_version(args: ArgsProtocol) -> int | None:
     safe_print(f"Version: {const.__version__}")
     return 0
