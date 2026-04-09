@@ -150,3 +150,6 @@ sdkconfig.*
 api-docs/
 
 esphome.code-workspace
+
+
+.venv311/
