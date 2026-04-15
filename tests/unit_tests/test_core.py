@@ -8,6 +8,9 @@ from strategies import mac_addr_strings
 
 from esphome import const, core
 
+# 这个测试类，是测试core模块下的函数。
+# pylint: disable=protected-access, too-many-public-methods
+
 
 class TestHexInt:
     @pytest.mark.parametrize(
