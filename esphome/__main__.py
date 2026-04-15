@@ -1100,17 +1100,31 @@ def command_wizard(args: ArgsProtocol) -> int | None:
 
 
 def command_config(args: ArgsProtocol, config: ConfigType) -> int | None:
-    if not CORE.verbose:
+    """
+    将配置参数打印出来，这也是config命令的作用，检查yaml的合法性，在调用这个函数更前一点，并将其打印到控制台。根据命令行参数，可能会隐藏敏感信息（如密码）以防止泄露。
+    注意，这里的config一斤更不是原始的YAML文件，而是“读进来并处理过”的配置对象。
+    command config 命令的作用就是把它再打印成 YAML，让你看到最终配置长什么样。
+
+    """
+    if not CORE.verbose:  # 如果没有启用 verbose 模式，调用 strip_default_ids() 从配置中移除默认的 ID 值，以避免在输出中显示这些默认值。
         config = strip_default_ids(config)
+
+    # 下面调用，是把配置对象转换成 YAML 格式的字符串，准备打印到控制台。根据 --show-secrets 参数，可能会隐藏敏感信息（如密码）以防止泄露。
     output = yaml_util.dump(config, args.show_secrets)
+
     # add the console decoration so the front-end can hide the secrets
+    # 增加控制台装饰，使前端能够隐藏敏感信息：
     if not args.show_secrets:
         output = re.sub(
             r"(password|key|psk|ssid)\: (.+)", r"\1: \\033[5m\2\\033[6m", output
         )
-    if not CORE.quiet:
+
+    if not CORE.quiet:  # 如果没有启用 quiet 模式，调用
         safe_print(output)
-    _LOGGER.info("Configuration is valid!")
+
+    _LOGGER.info(
+        "Configuration is valid!"
+    )  # 命令的最末端输出的就是这个日志。表示配置文件合法。
     return 0
 
 
@@ -1123,11 +1137,14 @@ def command_vscode(args: ArgsProtocol) -> int | None:
 
 
 def command_compile(args: ArgsProtocol, config: ConfigType) -> int | None:
+    """
+    编译命令的执行函数，负责将配置文件编译成C++代码，并编译程序，但不上传到设备上。这个函数的主要步骤包括：
+    """
     native_idf = getattr(args, "native_idf", False)
     exit_code = write_cpp(config, native_idf=native_idf)
     if exit_code != 0:
         return exit_code
-    if args.only_generate:
+    if args.only_generate:  # 如果指定了 --only-generate 参数，表示只生成 C++ 代码但不进行编译。此时记录日志并返回成功。
         _LOGGER.info("Successfully generated source code.")
         return 0
     exit_code = compile_program(args, config)
@@ -1546,27 +1563,32 @@ def command_rename(args: ArgsProtocol, config: ConfigType) -> int | None:
     return 0
 
 
+# esphome支持的命令分为两类：PRE_CONFIG_ACTIONS 和 POST_CONFIG_ACTIONS。
+# PRE_CONFIG_ACTIONS 是在解析配置文件之前执行的命令，如 wizard、version、dashboard 等，这些命令不需要访问配置文件。
+# POST_CONFIG_ACTIONS 是在解析配置文件之后执行的命令，如 config、compile、upload、logs 等，
+# 这些命令需要访问配置文件来执行相应的操作。
 PRE_CONFIG_ACTIONS = {
-    "wizard": command_wizard,
-    "version": command_version,
-    "dashboard": command_dashboard,
-    "vscode": command_vscode,
-    "update-all": command_update_all,
-    "clean-all": command_clean_all,
+    "wizard": command_wizard,  # 向导模式
+    "version": command_version,  # 打印版本号
+    "dashboard": command_dashboard,  # 开启web的面板
+    "vscode": command_vscode,  # vscode的配置命令，供vscode插件调用
+    "update-all": command_update_all,  # 更新所有设备
+    "clean-all": command_clean_all,  # 清除所有构建文件
 }
 
+# esphome支持的后处理命令都在这里。命令对应的执行函数。是一个映射字典。
 POST_CONFIG_ACTIONS = {
-    "config": command_config,
-    "compile": command_compile,
-    "upload": command_upload,
-    "logs": command_logs,
-    "run": command_run,
-    "clean": command_clean,
-    "clean-mqtt": command_clean_mqtt,
-    "idedata": command_idedata,
-    "rename": command_rename,
-    "discover": command_discover,
-    "analyze-memory": command_analyze_memory,
+    "config": command_config,  # 检查yaml配置文件
+    "compile": command_compile,  # 编译
+    "upload": command_upload,  # 上传
+    "logs": command_logs,  # 查看在线日志
+    "run": command_run,  # 检查，编译，上传命令。是用的最多的命令。
+    "clean": command_clean,  # 清理构建文件
+    "clean-mqtt": command_clean_mqtt,  # 清理mqtt主题
+    "idedata": command_idedata,  # 输出平台io的idedata信息，供第三方工具使用
+    "rename": command_rename,  # 重命名设备
+    "discover": command_discover,  # 发现设备
+    "analyze-memory": command_analyze_memory,  # 分析内存使用情况
 }
 
 SIMPLE_CONFIG_ACTIONS = [
@@ -1906,7 +1928,9 @@ def run_esphome(argv):
         args.mdns_address_cache, args.dns_address_cache
     )
     # Override log level if verbose is set
-    if args.verbose:
+    if (
+        args.verbose
+    ):  # 如果启用了 verbose 模式，将日志级别设置为 DEBUG，以便输出更详细的日志信息。
         args.log_level = "DEBUG"
     elif args.quiet:
         args.log_level = "CRITICAL"
@@ -1927,7 +1951,9 @@ def run_esphome(argv):
     _LOGGER.info("ESPHome %s", const.__version__)
 
     # Multiple configurations: use subprocesses to avoid state leakage
+    # 多配置文件：使用子进程来避免状态泄漏（例如模块全局变量中的 LVGL 触摸屏状态）
     # between compilations (e.g., LVGL touchscreen state in module globals)
+    # 如果命令行参数中指定了多个配置文件，使用 subprocess 来分别处理每个配置文件，以避免不同配置之间的状态干扰。
     if len(args.configuration) > 1:
         # Build command by reusing argv, replacing all configs with single file
         # argv[0] is the program path, skip it since we prefix with "esphome"
@@ -1941,6 +1967,7 @@ def run_esphome(argv):
         return run_multiple_configs(args.configuration, build_command)
 
     # Single configuration
+    # 如果只有一个配置文件，直接处理它。首先检查配置文件是否是 secrets 文件，如果是则跳过并记录警告。
     conf_path = Path(args.configuration[0])
     if any(conf_path.name == x for x in SECRETS_FILES):
         _LOGGER.warning("Skipping secrets file %s", conf_path)
@@ -1951,6 +1978,9 @@ def run_esphome(argv):
 
     # For logs command, skip updating external components
     skip_external = args.command == "logs"
+
+    # 读取配置文件并处理，得到一个配置对象。这个过程可能会涉及到解析 YAML、处理 substitutions、加载外部组件等。
+    # 这一步是 esphome 的核心功能之一，后续的命令（如 compile、upload、logs 等）都依赖于这个配置对象来执行相应的操作。
     config = read_config(
         dict(args.substitution) if args.substitution else {},
         skip_external_update=skip_external,
@@ -1959,12 +1989,13 @@ def run_esphome(argv):
         return 2
     CORE.config = config
 
+    # 如果发现执行的命令，没有在字典里面。就报错。命令不支持
     if args.command not in POST_CONFIG_ACTIONS:
         safe_print(f"Unknown command {args.command}")
         return 1
 
     try:
-        return POST_CONFIG_ACTIONS[args.command](args, config)
+        return POST_CONFIG_ACTIONS[args.command](args, config)  # 执行命令
     except EsphomeError as e:
         _LOGGER.error(e, exc_info=args.verbose)
         return 1

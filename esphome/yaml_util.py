@@ -458,6 +458,9 @@ for _loader in (ESPHomeLoader, ESPHomePurePythonLoader):
 
 
 def load_yaml(fname: Path, clear_secrets: bool = True) -> Any:
+    """
+    加载yaml文件
+    """
     if clear_secrets:
         _SECRET_VALUES.clear()
         _SECRET_CACHE.clear()
@@ -465,7 +468,9 @@ def load_yaml(fname: Path, clear_secrets: bool = True) -> Any:
 
 
 def _load_yaml_internal(fname: Path) -> Any:
-    """Load a YAML file."""
+    """Load a YAML file.
+    加载yaml文件
+    """
     try:
         with fname.open(encoding="utf-8") as f_handle:
             return parse_yaml(fname, f_handle)
@@ -476,7 +481,9 @@ def _load_yaml_internal(fname: Path) -> Any:
 def parse_yaml(
     file_name: Path, file_handle: TextIOWrapper, yaml_loader=_load_yaml_internal
 ) -> Any:
-    """Parse a YAML file."""
+    """Parse a YAML file.
+    解析yaml文件 ，输出python对象
+    """
     try:
         return _load_yaml_internal_with_type(
             ESPHomeLoader, file_name, file_handle, yaml_loader
@@ -500,6 +507,8 @@ def _load_yaml_internal_with_type(
     """Load a YAML file."""
     loader = loader_type(content, fname, yaml_loader)
     try:
+        # 此函数是判断是否符合yaml语法的核心函数，loader.get_single_data()会解析yaml文件的内容，并返回一个Python对象（通常是一个字典）。如果yaml文件中没有任何数据，它将返回None，我们使用or OrderedDict()来确保返回一个空字典而不是None。
+        # 先让 YAML loader 解析文件并拿到结果；如果结果是空值，就返回一个空的 OrderedDict。
         return loader.get_single_data() or OrderedDict()
     except yaml.YAMLError as exc:
         raise EsphomeError(exc) from exc
@@ -508,16 +517,20 @@ def _load_yaml_internal_with_type(
 
 
 def dump(dict_, show_secrets=False, sort_keys=False):
-    """Dump YAML to a string and remove null."""
-    if show_secrets:
+    """Dump YAML to a string and remove null.
+    解析析yaml数据，转换成字符串输出，并移除null值
+    """
+    if show_secrets:  # 是否显示敏感信息
         _SECRET_VALUES.clear()
         _SECRET_CACHE.clear()
+
+    # 这里使用了yaml库的dump方法来将Python对象转换成YAML格式的字符串。我们传入了几个参数来控制输出的格式：
     return yaml.dump(
         dict_,
-        default_flow_style=False,
-        allow_unicode=True,
-        Dumper=ESPHomeDumper,
-        sort_keys=sort_keys,
+        default_flow_style=False,  # 使用块样式输出（即多行格式），而不是流样式（即单行格式）
+        allow_unicode=True,  # 允许输出unicode字符
+        Dumper=ESPHomeDumper,  # 使用我们自定义的ESPHomeDumper类来处理特殊类型的对象
+        sort_keys=sort_keys,  # 是否对字典的键进行排序，默认为False，即保持原有顺序
     )
 
 

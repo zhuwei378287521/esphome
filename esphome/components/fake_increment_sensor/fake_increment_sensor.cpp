@@ -33,21 +33,21 @@ void FakeIncrementSensor::update() {
   /**
      * @brief 这是最核心的一句。
 
-因为你的类继承了 sensor::Sensor，所以它拥有 publish_state(...) 这个方法。
+      因为你的类继承了 sensor::Sensor，所以它拥有 publish_state(...) 这个方法。
 
-这句的意思是：
+      这句的意思是：
 
-“把当前计数器值作为这个传感器的新状态发布出去。”
+      “把当前计数器值作为这个传感器的新状态发布出去。”
 
-发布之后，这个值就会进入 ESPHome 的传感器体系，比如：
+      发布之后，这个值就会进入 ESPHome 的传感器体系，比如：
 
-在日志中出现
-传给 Home Assistant
-被前端显示
-被自动化使用
-所以你可以把 publish_state(...) 理解成：
+      在日志中出现
+      传给 Home Assistant
+      被前端显示
+      被自动化使用
+      所以你可以把 publish_state(...) 理解成：
 
-把 C++ 里的内部计算结果，正式交给 ESPHome 传感器系统。
+      把 C++ 里的内部计算结果，正式交给 ESPHome 传感器系统。
      *
      */
   this->publish_state(this->counter_);

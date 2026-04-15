@@ -1018,12 +1018,23 @@ def validate_config(
     command_line_substitutions: dict[str, Any] | None,
     skip_external_update: bool = False,
 ) -> Config:
+    """
+    验证yaml文件的合法性，并且返回一个Config对象，包含了验证后的配置和可能的错误信息。
+
+    validate_config() 不只是“检查对不对”，它还负责展开、补全、加载组件、调度验证步骤、整理最终配置。
+    """
+
     result = Config()
 
     loader.clear_component_meta_finders()
     loader.install_custom_components_meta_finder()
 
     # 0. Load packages
+
+    # 作用是：
+    # 先清掉旧的组件查找状态
+    # 再装上当前这次配置解析需要的组件加载器
+    # 这和后面“根据 YAML 找到组件目录”有关。
     if CONF_PACKAGES in config:
         from esphome.components.packages import do_packages_pass
 
@@ -1094,7 +1105,7 @@ def validate_config(
         )
         return result
 
-    # 2. Load partial core config
+    # 2. Load partial core config 第 2 阶段：预加载核心配置
     result[CONF_ESPHOME] = config[CONF_ESPHOME]
     result.add_output_path([CONF_ESPHOME], CONF_ESPHOME)
     try:
@@ -1109,7 +1120,7 @@ def validate_config(
     if min_version := config[CONF_ESPHOME].get(CONF_MIN_VERSION):
         cv.All(cv.version_number, cv.validate_esphome_version)(min_version)
 
-    # First run platform validation steps
+    # First run platform validation steps 第一步先对平台进行验证，平台验证的结果会影响后续的验证步骤（因为不同平台可能有不同的组件和配置要求）
     result.add_validation_step(
         LoadTargetPlatformValidationStep(target_platform, config[target_platform])
     )
@@ -1130,7 +1141,7 @@ def validate_config(
 
     result.add_validation_step(RemoveReferenceValidationStep())
 
-    result.run_validation_steps()
+    result.run_validation_steps()  # 运行所有验证步骤
 
     if substitutions is not None:
         result[CONF_SUBSTITUTIONS] = substitutions
@@ -1205,13 +1216,17 @@ class InvalidYAMLError(EsphomeError):
 def _load_config(
     command_line_substitutions: dict[str, Any], skip_external_update: bool = False
 ) -> Config:
-    """Load the configuration file."""
+    """Load the configuration file.
+    加载yaml配置文件
+    """
     try:
+        # 核心函数，读取我们自己写的yaml文件加载方法，传入的参数是yaml文件的路径，返回一个字典
         config = yaml_util.load_yaml(CORE.config_path)
     except EsphomeError as e:
         raise InvalidYAMLError(e) from e
 
     try:
+        # 检查yaml文件是否合法
         return validate_config(config, command_line_substitutions, skip_external_update)
     except EsphomeError:
         raise
@@ -1223,6 +1238,9 @@ def _load_config(
 def load_config(
     command_line_substitutions: dict[str, Any], skip_external_update: bool = False
 ) -> Config:
+    """
+    加载yaml配置文件，并进行验证
+    """
     try:
         return _load_config(command_line_substitutions, skip_external_update)
     except vol.Invalid as err:
@@ -1365,12 +1383,19 @@ def strip_default_ids(config):
 
 
 def read_config(command_line_substitutions, skip_external_update=False):
+    """
+    读取yaml配置文件
+
+    """
+
     _LOGGER.info("Reading configuration %s...", CORE.config_path)
     try:
         res = load_config(command_line_substitutions, skip_external_update)
     except EsphomeError as err:
         _LOGGER.error("Error while reading config: %s", err)
         return None
+
+    # 读取有错误时，打印错误信息，并且如果不是verbose模式，去掉默认ID的输出
     if res.errors:
         if not CORE.verbose:
             res = strip_default_ids(res)

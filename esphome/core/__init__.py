@@ -779,6 +779,7 @@ class EsphomeCore:
     def target_platform(self):
         return self.data[KEY_CORE][KEY_TARGET_PLATFORM]
 
+    # 属性：检查是否为ESP8266平台
     @property
     def is_esp8266(self):
         return self.target_platform == PLATFORM_ESP8266

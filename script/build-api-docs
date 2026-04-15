@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# 指定要使用的 Doxygen 版本。
+# 如果当前环境没有安装该版本，就会自动下载对应的二进制。
 DOXYGEN_VERSION="1.12.0"
 DOXYGEN_TAG="Release_${DOXYGEN_VERSION//./_}"
 
+# 默认命令名为 doxygen，先尝试系统安装的 doxygen。
 DOXYGEN_PATH="doxygen"
 
+# 在临时目录下载并解压指定版本的 Doxygen 二进制。
 download_doxygen() {
   TEMP_DIR="$(mktemp -d)"
   trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -13,12 +18,14 @@ download_doxygen() {
   curl -o doxygen.tar.gz -L "https://github.com/doxygen/doxygen/releases/download/${DOXYGEN_TAG}/doxygen-${DOXYGEN_VERSION}.linux.bin.tar.gz"
   tar -xzf doxygen.tar.gz
   rm doxygen.tar.gz
+
+  # 下载后将 DOXYGEN_PATH 指向临时目录中的可执行文件。
   DOXYGEN_PATH="$TEMP_DIR/doxygen-${DOXYGEN_VERSION}/bin/doxygen"
   popd >/dev/null
   echo "doxygen downloaded successfully"
 }
 
-# if doxygen command not found or version not as above, download it
+# 如果系统中已经安装 doxygen，则检查版本是否匹配。
 if command -v doxygen &>/dev/null; then
   DOXYGEN_VERSION_INSTALLED=$(doxygen --version)
   if [[ $DOXYGEN_VERSION_INSTALLED != $DOXYGEN_VERSION ]]; then
@@ -28,7 +35,9 @@ if command -v doxygen &>/dev/null; then
     echo "doxygen version $DOXYGEN_VERSION_INSTALLED found, using it"
   fi
 else
+  # 系统没有 doxygen，直接下载指定版本。
   download_doxygen
 fi
 
+# 用最终确定的 doxygen 可执行文件替换当前脚本进程并执行它。
 exec $DOXYGEN_PATH
